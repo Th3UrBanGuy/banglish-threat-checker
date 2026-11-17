@@ -32,10 +32,11 @@ def normalize_text(s: str) -> str:
     # Bangla okkhor-er majhe ASCII digit = leet (ক্রি1ম1নাল -> ক্রিমনাল).
     s = re.sub(r"(?<=[\u0980-\u09FF])[0-9]+(?=[\u0980-\u09FF])", "", str(s))
     s = str(s).lower().translate(LEET)
-    # shobder bhetorer mask char tule fela: m*rbo -> mrbo, kh*n -> khn
-    s = re.sub(r"(?<=\w)[*#._\-]+(?=\w)", "", s)
-    # baki mask char space diye bodle dao
-    s = re.sub(r"[*#_]+", " ", s)
+    # shobder bhetorer mask char tule fela: m*rbo -> mrbo, kh*n -> khn,
+    # চু,দি -> চুদি (comma-o mask char, 2026-11-18: "চু,,, দি")
+    s = re.sub(r"(?<=\w)[*#._\-,]+(?=\w)", "", s)
+    # baki mask char space diye bodle dao ("চু,,, দি" -> "চু দি")
+    s = re.sub(r"[*#_,]+", " ", s)
     # ek-i okkhor 3+ bar -> 2 bar
     s = re.sub(r"(.)\1{2,}", r"\1\1", s)
     s = re.sub(r"\s+", " ", s).strip()
