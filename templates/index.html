@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Banglish Slang &amp; Threat Checker</title>
+<style>
+  :root { --ink:#1a1a2e; --muted:#6b7280; --line:#e5e7eb; --card:#ffffff; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Bengali",sans-serif; background:#f6f7f9; color:var(--ink); }
+  .wrap { max-width:760px; margin:0 auto; padding:28px 18px 60px; }
+  header { margin-bottom:22px; }
+  h1 { font-size:26px; margin:0 0 6px; letter-spacing:-.02em; }
+  .sub { color:var(--muted); font-size:14px; line-height:1.5; }
+  .tabs { display:flex; gap:8px; margin:20px 0 14px; }
+  .tab-btn { border:1px solid var(--line); background:#fff; padding:9px 16px; border-radius:999px; font-size:14px; cursor:pointer; }
+  .tab-btn.active { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .tab-pane { display:none; }
+  .tab-pane.active { display:block; }
+  textarea { width:100%; min-height:96px; padding:12px 14px; font-size:16px; line-height:1.5; border:1px solid var(--line); border-radius:12px; resize:vertical; font-family:inherit; background:#fff; }
+  textarea:focus { outline:2px solid #93c5fd; border-color:#93c5fd; }
+  .btn { display:inline-block; margin-top:12px; padding:11px 22px; font-size:15px; font-weight:600; border:none; border-radius:10px; background:var(--ink); color:#fff; cursor:pointer; }
+  .btn.secondary { background:#fff; color:var(--ink); border:1px solid var(--line); }
+  .examples { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+  .example-chip { border:1px solid var(--line); background:#fff; padding:7px 12px; border-radius:999px; font-size:13px; cursor:pointer; }
+  .example-chip:hover { border-color:#9ca3af; }
+  .examples-label { font-size:13px; color:var(--muted); margin-top:16px; }
+  #result { margin-top:20px; }
+  .verdict-card { border:2px solid; border-radius:14px; padding:18px; margin-bottom:14px; }
+  .verdict-badge { display:inline-block; color:#fff; font-weight:700; font-size:14px; padding:5px 12px; border-radius:999px; }
+  .verdict-title { font-size:20px; font-weight:700; margin-top:10px; }
+  .verdict-conf { color:#374151; margin-top:4px; font-size:14px; }
+  .prob-bars { margin-top:14px; }
+  .prob-row { display:flex; align-items:center; gap:10px; margin-top:7px; font-size:13px; }
+  .prob-label { width:64px; flex:none; }
+  .prob-track { flex:1; height:8px; background:rgba(0,0,0,.08); border-radius:99px; overflow:hidden; }
+  .prob-fill { height:100%; border-radius:99px; }
+  .prob-val { width:38px; text-align:right; flex:none; }
+  .details { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; }
+  .details h3 { font-size:14px; margin:18px 0 8px; }
+  .details h3:first-child { margin-top:0; }
+  .muted { color:var(--muted); font-size:14px; line-height:1.6; }
+  .mono { font-family:ui-monospace,Menlo,monospace; font-size:14px; background:#f3f4f6; padding:10px 12px; border-radius:8px; word-break:break-word; }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; }
+  .chip { padding:6px 11px; border-radius:999px; font-size:13px; font-weight:600; }
+  .chip.sev1 { background:#fef3c7; color:#92400e; }
+  .chip.sev2 { background:#ffedd5; color:#9a3412; }
+  .chip.sev3 { background:#fee2e2; color:#991b1b; }
+  .batch-summary { background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px; font-weight:600; margin-bottom:12px; }
+  table.batch-table { width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--line); border-radius:12px; overflow:hidden; font-size:14px; }
+  .batch-table th, .batch-table td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+  .batch-table tr:last-child td { border-bottom:none; }
+  .mini-badge { color:#fff; font-size:12px; font-weight:700; padding:3px 9px; border-radius:999px; white-space:nowrap; }
+  footer { margin-top:34px; padding-top:18px; border-top:1px solid var(--line); color:var(--muted); font-size:13px; line-height:1.7; }
+  #copyBtn { display:none; }
+  @media (max-width:560px){ h1{font-size:22px;} .prob-label{width:56px;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Banglish Slang &amp; Threat Checker</h1>
+    <div class="sub">ফেসবুক কমেন্টের গালি ও হুমকি চেকার — বাংলিশ + চাটগাঁইয়া। ট্রেনিং করা মডেল (TF-IDF + Logistic Regression) Python সার্ভারে চলে — আসল sklearn মডেল, কোনো অনুমান না। ML Lab প্রজেক্ট, BGC Trust University।</div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="tab-single" type="button">একটা চেক করো</button>
+    <button class="tab-btn" data-tab="tab-batch" type="button">অনেকগুলো একসাথে</button>
+  </div>
+
+  <div id="tab-single" class="tab-pane active">
+    <textarea id="inputText" placeholder="এখানে কমেন্ট বা লেখা লিখুন… যেমন: tui ekta harami"></textarea>
+    <button id="checkBtn" class="btn" type="button">Check করো</button>
+    <button id="copyBtn" class="btn secondary" type="button">রিপোর্ট কপি করো</button>
+    <div class="examples-label">উদাহরণ — একটাতে ট্যাপ করলেই চেক হবে:</div>
+    <div class="examples" id="examples"></div>
+    <div id="result"></div>
+  </div>
+
+  <div id="tab-batch" class="tab-pane">
+    <textarea id="batchText" placeholder="প্রতি লাইনে একটা করে কমেন্ট লিখুন…"></textarea>
+    <button id="batchBtn" class="btn" type="button">সবগুলো চেক করো</button>
+    <div id="batchResult" style="margin-top:18px;"></div>
+  </div>
+
+  <footer>
+    <strong>মডেল:</strong> TF-IDF (word 1–2 + char 3–5) + Logistic Regression, deep learning ছাড়া। ডেটাসেট ৬,৬০৫ রো · লেক্সিকন ৩,১৯২ শব্দ · ১৭ জেলা। Baseline (word-only, no norm) ০.৭১৮ → Improved ০.৭৫৮ · Level-3 recall ০.৯৪৭।<br>
+    <strong>সত্যি সীমা:</strong> বাংলা অক্ষরে লেখা ভালো চেনে না — বাংলিশে (Roman) লিখুন। "কিরে বলদ"-এর মতো বন্ধুর মজা নাকি রাগ, সেটা শুধু লেখা দেখে বোঝা যায় না। যা লিখবেন তা শুধু চেক করার জন্য সার্ভারে পাঠানো হয় — সংরক্ষণ করা হয় না।
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var LEVELS = [
+    { n: 0, label: "Safe", bn: "স্বাভাবিক — গালি/হুমকি নেই", color: "#16a34a", bg: "#dcfce7" },
+    { n: 1, label: "Level 1", bn: "হালকা — মজা/তাচ্ছিল্য", color: "#b45309", bg: "#fef3c7" },
+    { n: 2, label: "Level 2", bn: "মাঝারি — অপমানজনক", color: "#c2410c", bg: "#ffedd5" },
+    { n: 3, label: "Level 3", bn: "মারাত্মক — অশ্লীল / হুমকি", color: "#b91c1c", bg: "#fee2e2" }
+  ];
+
+  function $(id) { return document.getElementById(id); }
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+
+  function api(path, body) {
+    return fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    }).then(function (resp) {
+      if (!resp.ok) throw new Error("server " + resp.status);
+      return resp.json();
+    });
+  }
+
+  function renderResult(r) {
+    var box = $("result");
+    box.innerHTML = "";
+    var lv = LEVELS[r.level];
+    var card = el("div", "verdict-card");
+    card.style.borderColor = lv.color;
+    card.style.background = lv.bg;
+    var badge = el("div", "verdict-badge");
+    badge.style.background = lv.color;
+    badge.textContent = lv.label;
+    card.appendChild(badge);
+    var title = el("div", "verdict-title", lv.bn);
+    card.appendChild(title);
+    var conf = el("div", "verdict-conf",
+      "আত্মবিশ্বাস: " + Math.round(r.probs[r.level] * 100) + "%");
+    card.appendChild(conf);
+    var bars = el("div", "prob-bars");
+    for (var i = 0; i < 4; i++) {
+      var row = el("div", "prob-row");
+      row.appendChild(el("span", "prob-label", LEVELS[i].label));
+      var track = el("div", "prob-track");
+      var fill = el("div", "prob-fill");
+      fill.style.width = Math.max(2, Math.round(r.probs[i] * 100)) + "%";
+      fill.style.background = LEVELS[i].color;
+      track.appendChild(fill);
+      row.appendChild(track);
+      row.appendChild(el("span", "prob-val", Math.round(r.probs[i] * 100) + "%"));
+      bars.appendChild(row);
+    }
+    card.appendChild(bars);
+    box.appendChild(card);
+
+    var det = el("div", "details");
+    det.appendChild(el("h3", null, "যেসব শব্দ ধরা পড়েছে"));
+    if (r.matches.length) {
+      var chips = el("div", "chips");
+      r.matches.forEach(function (m) {
+        chips.appendChild(el("span", "chip sev" + m.sev, m.t + "  · L" + m.sev));
+      });
+      det.appendChild(chips);
+    } else {
+      det.appendChild(el("p", "muted", "লেক্সিকনের কোনো শব্দ মেলেনি।"));
+    }
+    det.appendChild(el("h3", null, "মডেল আসলে যা পড়েছে (normalized)"));
+    det.appendChild(el("p", "mono", r.clean || "(খালি)"));
+    det.appendChild(el("h3", null, "তুলনা — সাধারণ keyword ফিল্টার (baseline)"));
+    var cmp = el("p", "muted");
+    if (r.naive.verdict === "safe") {
+      cmp.textContent = "সাধারণ ফিল্টার বলতো: Safe — কিছু পাওয়া যায়নি। অথচ আমাদের মডেল বলছে: " + lv.label + "।";
+    } else {
+      cmp.textContent = "সাধারণ ফিল্টারও ধরেছে (" + r.naive.word + ") — আমাদের মডেল বলছে: " + lv.label + "।";
+    }
+    det.appendChild(cmp);
+    box.appendChild(det);
+
+    window.__lastReport = r;
+    $("copyBtn").style.display = "inline-block";
+  }
+
+  function reportText(r) {
+    var lv = LEVELS[r.level];
+    return [
+      "Banglish Slang & Threat Checker — রিপোর্ট",
+      "লেখা: " + r.raw,
+      "ফলাফল: " + lv.label + " — " + lv.bn,
+      "আত্মবিশ্বাস: " + Math.round(r.probs[r.level] * 100) + "%",
+      "ধরা পড়া শব্দ: " + (r.matches.length ? r.matches.map(function (m) { return m.t + " (L" + m.sev + ")"; }).join(", ") : "নেই"),
+      "Normalized লেখা: " + (r.clean || "(খালি)"),
+      "সাধারণ keyword ফিল্টার: " + (r.naive.verdict === "safe" ? "Safe — কিছু পাওয়া যায়নি" : "ধরেছে: " + r.naive.word)
+    ].join("\n");
+  }
+
+  function doSingle() {
+    var text = $("inputText").value;
+    if (!text.trim()) { $("result").innerHTML = "<p class='muted'>প্রথমে কিছু লিখুন।</p>"; return; }
+    $("result").innerHTML = "<p class='muted'>চেক করা হচ্ছে…</p>";
+    api("/api/check", { text: text }).then(renderResult).catch(function (err) {
+      $("result").innerHTML = "<p class='muted'>সার্ভারে সমস্যা হয়েছে (" + err.message + ") — একটু পরে আবার চেষ্টা করুন।</p>";
+    });
+  }
+
+  function doBatch() {
+    var lines = $("batchText").value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
+    var out = $("batchResult");
+    out.innerHTML = "";
+    if (!lines.length) { out.innerHTML = "<p class='muted'>প্রথমে প্রতি লাইনে একটা করে কমেন্ট লিখুন।</p>"; return; }
+    out.innerHTML = "<p class='muted'>চেক করা হচ্ছে…</p>";
+    api("/api/batch", { texts: lines }).then(function (data) {
+      out.innerHTML = "";
+      var counts = data.counts;
+      var sum = el("div", "batch-summary");
+      sum.textContent = "মোট " + data.total + "টা — Safe: " + counts[0] + " · L1: " + counts[1] + " · L2: " + counts[2] + " · L3: " + counts[3];
+      out.appendChild(sum);
+      var table = el("table", "batch-table");
+      var head = el("tr");
+      ["কমেন্ট", "ফলাফল", "আত্মবিশ্বাস"].forEach(function (h) { head.appendChild(el("th", null, h)); });
+      table.appendChild(head);
+      data.results.forEach(function (r) {
+        var tr = el("tr");
+        tr.appendChild(el("td", null, r.raw));
+        var tdL = el("td");
+        var b = el("span", "mini-badge");
+        b.style.background = LEVELS[r.level].color;
+        b.textContent = LEVELS[r.level].label;
+        tdL.appendChild(b);
+        tr.appendChild(tdL);
+        tr.appendChild(el("td", null, Math.round(r.probs[r.level] * 100) + "%"));
+        table.appendChild(tr);
+      });
+      out.appendChild(table);
+      var dl = el("button", "btn secondary", "CSV ডাউনলোড");
+      dl.onclick = function () {
+        var csv = "comment,level,confidence\n" + data.results.map(function (r) {
+          return '"' + r.raw.replace(/"/g, '""') + '",' + r.level + ',' + Math.round(r.probs[r.level] * 100) + "%";
+        }).join("\n");
+        var a = document.createElement("a");
+        a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+        a.download = "threat-check-results.csv";
+        a.click();
+        URL.revokeObjectURL(a.href);
+      };
+      out.appendChild(dl);
+    }).catch(function (err) {
+      out.innerHTML = "<p class='muted'>সার্ভারে সমস্যা হয়েছে (" + err.message + ") — একটু পরে আবার চেষ্টা করুন।</p>";
+    });
+  }
+
+  var EXAMPLES = [
+    "kal class hobe?",
+    "tui ekta bolod",
+    "tui ekta harami",
+    "tui ekta madarchod",
+    "toke m*rbo",
+    "h a r a m i",
+    "h4rami",
+    "tore dekhilom"
+  ];
+
+  function init() {
+    var wrap = $("examples");
+    EXAMPLES.forEach(function (ex) {
+      var b = el("button", "example-chip", ex);
+      b.type = "button";
+      b.onclick = function () { $("inputText").value = ex; doSingle(); };
+      wrap.appendChild(b);
+    });
+    $("checkBtn").onclick = doSingle;
+    $("inputText").addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) doSingle();
+    });
+    $("copyBtn").onclick = function () {
+      var r = window.__lastReport;
+      if (!r) return;
+      var txt = reportText(r);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(txt);
+      } else {
+        var ta = document.createElement("textarea");
+        ta.value = txt; document.body.appendChild(ta); ta.select();
+        document.execCommand("copy"); document.body.removeChild(ta);
+      }
+      this.textContent = "কপি হয়েছে";
+      var self = this;
+      setTimeout(function () { self.textContent = "রিপোর্ট কপি করো"; }, 1500);
+    };
+    $("batchBtn").onclick = doBatch;
+    document.querySelectorAll(".tab-btn").forEach(function (btn) {
+      btn.onclick = function () {
+        document.querySelectorAll(".tab-btn").forEach(function (b) { b.classList.remove("active"); });
+        document.querySelectorAll(".tab-pane").forEach(function (p) { p.classList.remove("active"); });
+        btn.classList.add("active");
+        $(btn.dataset.tab).classList.add("active");
+      };
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else { init(); }
+})();
+</script>
+</body>
+</html>
