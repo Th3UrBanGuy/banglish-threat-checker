@@ -22,7 +22,7 @@ LAST=last_retrain.json
 fail() { echo "RETRAIN FAILED: $1"; exit 1; }
 
 # --- 1. fingerprint: retrain only on change -------------------------------
-FP=$(sha256sum learned_words.json build_slang_dataset.py variant_tests.py \
+FP=$(sha256sum learned_words.json harvest_words.json build_slang_dataset.py variant_tests.py \
      textnorm.py verify_jsonl.py 2>/dev/null | sha256sum | cut -d' ' -f1)
 if [ -f "$LAST" ]; then
     OLD_FP=$(python3 -c "import json; print(json.load(open('$LAST')).get('fingerprint',''))" 2>/dev/null)
@@ -100,9 +100,13 @@ print('killed gunicorn masters:', masters)
 PYEOF
 sleep 3
 $APP/launch.sh
-sleep 6
-HEALTH=$(curl -s --noproxy '*' --max-time 10 http://127.0.0.1:7860/health)
-echo "health: $HEALTH"
+HEALTH=""
+for i in 1 2 3 4 5 6; do
+  sleep 5
+  HEALTH=$(curl -s --noproxy '*' --max-time 10 http://127.0.0.1:7860/health)
+  echo "health try $i: $HEALTH"
+  echo "$HEALTH" | grep -q '"ok":true' && break
+done
 echo "$HEALTH" | grep -q '"ok":true' || fail "server did not come back after restart"
 
 # live probe: newest learned word must predict its labeled level
@@ -146,8 +150,10 @@ print('killed gunicorn masters for rollback:', masters)
 PYEOF
     sleep 3
     $APP/launch.sh
-    sleep 6
-    curl -s --noproxy '*' --max-time 10 http://127.0.0.1:7860/health
+    for i in 1 2 3 4 5 6; do
+      sleep 5
+      curl -s --noproxy '*' --max-time 10 http://127.0.0.1:7860/health | grep -q '"ok":true' && break
+    done
     fail "rolled back — new model failed live probe"
 }
 

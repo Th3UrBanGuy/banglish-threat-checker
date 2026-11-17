@@ -574,18 +574,36 @@ def _learned_script(t):
 
 
 LEARNED = []
-try:
-    LEARNED = json.load(open(os.path.join(OUT, "learned_words.json"),
-                             encoding="utf-8"))
-except Exception:
-    LEARNED = []
+for fname, src in [("learned_words.json", "learned_words"),
+                   ("harvest_words.json", "harvest_round1")]:
+    try:
+        for e in json.load(open(os.path.join(OUT, fname),
+                                encoding="utf-8")):
+            e = dict(e)
+            e.setdefault("source", src)
+            LEARNED.append(e)
+    except Exception:
+        pass
 for e in LEARNED:
     t = str(e.get("text", "")).strip()
     if not t:
         continue
-    add_lex(t, _learned_script(t), "bn", e.get("dialect", "banglish"),
-            e.get("category", "insult"), int(e.get("level", 2)),
-            "learned_words")
+    lvl = int(e.get("level", 2))
+    if lvl < 1:
+        continue  # lexicon-e level 0 nai — normal word lexicon-er kaj na
+    # lexicon-e shudhu TERM jay — purno bakko na (2026-11-18: FB sentence
+    # entry-gulo term hishebe dhuke lexicon noshto korchilo). term field
+    # thakle seta; na thakle shudhu 1-2 shobder phrase.
+    term = str(e.get("term", "")).strip()
+    if not term:
+        _toks = t.split()
+        if len(_toks) <= 2 and "?" not in t and "," not in t:
+            term = t
+    if not term:
+        continue
+    add_lex(term, _learned_script(term), "bn", e.get("dialect", "banglish"),
+            e.get("category", "insult"), int(e.get("severity", lvl)),
+            e.get("source", "learned_words"))
 
 # 7. Masked variants (obfuscation) — severity>=2 Banglish term-er ekta
 #    masked copy: majher ekta okkhor * diye bodle dao
@@ -1015,16 +1033,20 @@ for e in LEARNED:
         continue
     lvl = int(e.get("level", 2))
     dia = e.get("dialect", "banglish")
-    add_msg(t, lvl, dia, "learned_words")
+    src = e.get("source", "learned_words")
+    add_msg(t, lvl, dia, src)
     syn_count += 1
-    if lvl >= 2:
+    if lvl >= 1 and e.get("templates", True):
+        # L1-o template dorkar — nahole "ভইঙ্গা"-r moto teasing shobdo
+        # bare row-e shikhe na (2026-11-18: "ভইঙ্গা" L0, "তুই ভইঙ্গা" L2
+        # hoye gechilo; L1 frame row na thakay). L0-te kokhono template na.
         if _learned_script(t) == "bangla":
             for tpl in [f"তুই একটা {t}", f"ওই {t}", f"{t} কই যাস"]:
-                add_msg(tpl, lvl, dia, "learned_words")
+                add_msg(tpl, lvl, dia, src)
                 syn_count += 1
         else:
             for tpl in [f"tui ekta {t}", f"oi {t}", f"{t} koi jas"]:
-                add_msg(tpl, lvl, dia, "learned_words")
+                add_msg(tpl, lvl, dia, src)
                 syn_count += 1
 
 random.shuffle(messages)
