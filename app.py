@@ -5,8 +5,14 @@ The REAL trained sklearn model (banglish_threat_model.pkl) runs here,
 server-side. No JS port, no approximation: the same pipeline as
 verify_jsonl.py (normalize_text + TF-IDF word+char + LogReg).
 
-Privacy: request text is NEVER stored or logged — it is checked and
-forgotten. Only error lines (no text) go to the log.
+Privacy: request text was NEVER stored or logged — it was checked and
+forgotten. Only error lines (no text) went to the log.
+
+Logging (owner-ordered 2026-11-18, continuous learning): every /api/check
++ /api/batch text is now appended to check_log.jsonl (0600, VM-only, never
+published) with its predicted level — the owner reviews new test words and
+retrains on the misses. The static checker.html still logs nothing
+(browser-only).
 
 Routes:
   GET  /            -> checker UI
@@ -14,6 +20,7 @@ Routes:
   POST /api/check   {"text": "..."} -> level, probs, clean, matches, naive
   POST /api/batch   {"texts": [...]} -> counts + per-line results
 """
+import datetime
 import json
 import os
 import re
@@ -70,6 +77,23 @@ def _esc_re(s: str) -> str:
 
 app = Flask(__name__)
 
+LOG_PATH = os.path.join(HERE, "check_log.jsonl")
+
+
+def _log_check(raw: str, level: int, top_prob: float, naive_verdict: str):
+    # Owner-ordered (2026-11-18): log checked texts so the model can keep
+    # learning from real test words. Never breaks a check (try/except).
+    try:
+        rec = {"ts": datetime.datetime.now(datetime.timezone.utc)
+               .isoformat(timespec="seconds"),
+               "text": raw, "level": level, "top": round(top_prob, 3),
+               "naive": naive_verdict}
+        fd = os.open(LOG_PATH, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        with os.fdopen(fd, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
 _model = joblib.load(os.path.join(HERE, "banglish_threat_model.pkl"))
 _pipe = _model["model"]
 with open(os.path.join(HERE, "lexicon.json"), encoding="utf-8") as f:
@@ -123,7 +147,9 @@ def api_check():
     text = str(data.get("text", ""))[:2000]
     if not text.strip():
         return jsonify({"error": "empty text"}), 400
-    return jsonify(check_one(text))
+    res = check_one(text)
+    _log_check(text, res["level"], max(res["probs"]), res["naive"]["verdict"])
+    return jsonify(res)
 
 
 @app.route("/api/batch", methods=["POST"])
@@ -134,6 +160,8 @@ def api_batch():
         return jsonify({"error": "empty texts"}), 400
     texts = [str(t)[:2000] for t in texts[:200] if str(t).strip()]
     results = [check_one(t) for t in texts]
+    for t, r in zip(texts, results):
+        _log_check(t, r["level"], max(r["probs"]), r["naive"]["verdict"])
     counts = [0, 0, 0, 0]
     for r in results:
         counts[r["level"]] += 1

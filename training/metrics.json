@@ -1,0 +1,19 @@
+{
+  "best_name": "LogReg",
+  "best_acc": 0.807,
+  "base_acc": 0.741,
+  "l3_recall_imp": 0.968,
+  "l3_recall_base": 0.955,
+  "masked_base": 0.689,
+  "masked_no_norm": 0.771,
+  "masked_norm": 0.771,
+  "variant_total": 56,
+  "variant_misses": [],
+  "rows": 6932,
+  "levels": {
+    "0": 2718,
+    "1": 599,
+    "2": 2844,
+    "3": 771
+  }
+}
