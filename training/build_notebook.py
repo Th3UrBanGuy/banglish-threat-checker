@@ -261,7 +261,7 @@ Why this problem: most threats and abuse on Facebook and WhatsApp arrive in Bang
 
 Method in one line: TF-IDF features (word 1–3 grams + character 2–6 grams) with Logistic Regression, compared against five other classical classifiers. I measure a simple baseline (word features only, no normalization) against the improved model, so the improvement is visible in numbers.
 
-Two tracks, two different jobs. Track A (Sections 1–9) classifies a word or phrase by severity — this is the shipped model behind the live checker. Track B (Section 10) classifies a whole sentence as affection, abuse, or normal: the same word can be either, depending on who says it, so it needs sentence context. Track B is research, not shipped.
+The same word can be affection or abuse depending on who says it, so I teach the model with paired frames in the training data: `আমার কুত্তার বাচ্চাটা কই গেল` from a mother is Level 0, `তুই কুত্তার বাচ্চা` from someone else is Level 2. Section 8 shows both.
 """))
 
 cells.append(code("""# 0. Setup — install the packages this notebook needs, then fix the
@@ -334,22 +334,6 @@ if lex_path:
 else:
     print("\\n(Lexicon file not found — the dataset alone is enough; the lexicon is optional)")
 
-# 1c. Track B — sentence dataset (separate file, separate procedure — Section 10)
-SENT_CANDIDATES = [
-    "banglish_sentence_dataset.parquet",
-    "/content/banglish_sentence_dataset.parquet",
-    "/content/drive/MyDrive/ML-Lab-Threat/banglish_sentence_dataset.parquet",
-]
-sent_path = next((p for p in SENT_CANDIDATES if os.path.exists(p)), None)
-if sent_path:
-    sdf = pd.read_parquet(sent_path)
-    sdf = sdf.dropna(subset=["text"]).drop_duplicates(subset=["text"]).reset_index(drop=True)
-    print("\\n--- Track B sentence dataset:", sent_path, "| rows:", len(sdf), "---")
-    print(sdf["level"].value_counts().sort_index())
-    print("sources:\\n", sdf["source"].value_counts())
-else:
-    sdf = None
-    print("\\n(No Track B sentence file — Track A still runs; upload banglish_sentence_dataset.parquet to see Track B)")
 """))
 
 cells.append(md("""## 2. Normalization — cleaning obfuscated text
@@ -454,7 +438,7 @@ word_only = TfidfVectorizer(ngram_range=(1, 2), max_features=5000, sublinear_tf=
 def make_pipe(clf, improved=True):
     # Clone the vectorizers — one fresh copy per pipeline. Sharing a single
     # fitted vectorizer across pipelines is a bug: fitting one pipeline
-    # refits it, so a later fit (e.g. Track B) silently changes this
+    # refits it, so a later fit silently changes this
     # pipeline's features and its predictions collapse.
     if improved:
         feats = FeatureUnion([("word", clone(word_tfidf)), ("char", clone(char_tfidf))])
@@ -507,116 +491,6 @@ for n in results:
 best_pipe = results[best_name][0]
 print(f"\\n>>> BEST (ship): {best_name} — accuracy {results[best_name][1]:.3f}")
 print("    (LinearSVC scores close on accuracy but gives no probabilities, so it cannot ship — see the full grid in Section 5b.)")
-"""))
-
-# ================================================================ Track B
-cells.append(md("""## 10. Track B — sentence-level classification (a separate procedure)
-
-Track A and Track B answer different questions, so they train on different data with different procedures. Track A asks how severe a word or phrase is. Track B reads a whole sentence and decides whether it is affection, abuse, or normal — the same word can be either, depending on who says it (`আমার কুত্তার বাচ্চাটা কই গেল` from a mother is affection; `তুই কুত্তার বাচ্চা` from someone else is abuse).
-
-|  | Track A (word-level) | Track B (sentence-level) |
-|---|---|---|
-| Question | How severe is this word/phrase? | Is this whole sentence affection, abuse, or normal? |
-| Data | 12,639 rows (full dataset) | 21,714 sentence rows |
-| Why separate? | Recognizing the word is enough | The same word is affectionate or abusive — context decides |
-
-Track B data: Kothon (7,986 sentences), ChatgaiyyaAlap (3,148 sentences + 1,417 dictionary entries), ChatgaiyyaBench (3,009 vulgarity + 1,582 romanized + 204 lexicon entries; machine labels, so some are wrong), ChattogramSent v2 (2,703 sentences; 59% duplicates ChatgaiyyaAlap), ONUBAD (605 sentences + 787 words + 113 clauses), Gemini Deep Research (138 entries), 22 hand-written paired frames, and Meta AI synthetic sentences (marked synthetic in the methodology).
-
-Honest warning: 97% of the sentence data is Level 0 (21,112 of 21,714), and Level 3 has only 28 rows. Accuracy looks good (0.96) but means little here — macro-F1 and per-class recall are the real measures, and Level 3 recall rests on 6 test rows.
-"""))
-
-cells.append(code("""# 10a. Track B — five classifiers, the same V4 features and the same rules
-# (80/20 split, seed 42). Same as Track A: normalization plus training-only
-# masked augmentation on Level 2+ rows.
-from sklearn.metrics import f1_score, recall_score
-if sdf is None:
-    print("No Track B data — upload banglish_sentence_dataset.parquet and run again.")
-else:
-    sdf["clean"] = sdf["text"].apply(normalize_text)
-    s_train, s_test = train_test_split(sdf, test_size=0.2, random_state=42, stratify=sdf["level"])
-    print("Track B train:", len(s_train), "| test:", len(s_test),
-          "| test L3 n =", int((s_test["level"] == 3).sum()), "(small sample — do not trust L3 recall too much)")
-    s_aug_rows = []
-    for _, r in s_train[s_train["level"] >= 2].iterrows():
-        m = make_masked(r["clean"])
-        s_aug_rows.append({"text": m, "level": int(r["level"]),
-                           "dialect": "augmented_masked", "source": "augmentation",
-                           "clean": normalize_text(m)})
-    s_train_aug = pd.concat([s_train, pd.DataFrame(s_aug_rows)], ignore_index=True)
-    print("train + augmented:", len(s_train_aug))
-    s_masked = s_test.copy()
-    s_masked["masked_clean"] = s_masked["clean"].apply(lambda t: normalize_text(make_masked(t)))
-
-    s_models = {
-        "LogReg": LogisticRegression(max_iter=1000, class_weight="balanced"),
-        "LinearSVC": LinearSVC(class_weight="balanced"),
-        "MultinomNB": MultinomialNB(),
-        "ComplementNB": ComplementNB(),
-        "RandomForest": RandomForestClassifier(n_estimators=100, class_weight="balanced", n_jobs=-1, random_state=42),
-    }
-    s_results = {}
-    for name, clf in s_models.items():
-        pipe = make_pipe(clf, improved=True)
-        pipe.fit(s_train_aug["clean"], s_train_aug["level"])
-        pred = pipe.predict(s_test["clean"])
-        acc = accuracy_score(s_test["level"], pred)
-        l3r = recall_score(s_test["level"], pred, labels=[3], average="macro", zero_division=0)
-        macc = accuracy_score(s_test["level"], pipe.predict(s_masked["masked_clean"]))
-        mf1 = f1_score(s_test["level"], pred, average="macro", zero_division=0)
-        s_results[name] = (pipe, acc)
-        print(f"\\n===== Track B {name} — acc: {acc:.3f} | L3 recall: {l3r:.3f} | masked: {macc:.3f} | macro-F1: {mf1:.3f} =====")
-        print(classification_report(s_test["level"], pred, target_names=[LEVEL_NAMES[i] for i in sorted(LEVEL_NAMES)], zero_division=0))
-
-    # Track B baseline: word-only, no norm
-    s_base = make_pipe(LogisticRegression(max_iter=1000, class_weight="balanced"), improved=False)
-    s_base.fit(s_train["text"], s_train["level"])
-    s_base_pred = s_base.predict(s_test["text"])
-    print(f"\\nTrack B baseline (word-only, no norm): acc = {accuracy_score(s_test['level'], s_base_pred):.3f} | "
-          f"L3 recall = {recall_score(s_test['level'], s_base_pred, labels=[3], average='macro', zero_division=0):.3f}")
-    print("(Baseline 0.845 — with 97% Level 0, guessing 'all Level 0' alone would score high, but it catches almost no teasing or harassment.)")
-"""))
-
-cells.append(md("""## 10b. Track B results — reading the numbers
-
-Accuracy looks strong (0.93–0.98) but it is misleading: with 97% Level 0, saying "everything is Level 0" alone scores 0.97. The honest measures are macro-F1 and per-class recall — how much teasing (L1) and harassment (L2) the model actually catches. The exact numbers are printed in the output of the cell above.
-
-LogReg ships for Track B for the same reason as Track A: it gives probabilities, and it has the best L1 recall (0.51) and L2 recall (0.63) among the probability models. LinearSVC has a higher macro-F1 (0.674), but its L1 recall is 0.37 and it gives no probabilities. The variant test is a word-level test, so I do not judge a sentence model by it — that is the point: Track B cannot replace Track A.
-
-Two honest gaps in the demo (Section 10c): the model still calls a mother's `কুত্তার বাচ্চা` abusive, and an angry `ভইঙ্গা` neutral. Only 22 paired frames exist in 21,714 rows, so the model has not learned speaker context yet. More affection/abuse sentence pairs will close this gap.
-
-Summary, both tracks: Logistic Regression wins in both — not because I changed the algorithm, but because the data and the procedure changed. I tried five classifiers on each track; LogReg was the best probability model in both.
-"""))
-
-cells.append(code("""# 10c. Track B demo — the same word, affection vs abuse (paired frames).
-print("NOTE (honest): in the output below you will see the model still gets "
-      "the mother's affection frame wrong (Level 2 instead of 0) and the "
-      "angry bhoinga frame wrong (Level 0 instead of 2). Only 22 paired "
-      "frames exist in 21,714 rows, so the model has not learned speaker "
-      "context yet. I keep this demo to show where the model still fails, "
-      "not to hide it.")
-if sdf is not None:
-    s_best = s_results["LogReg"][0]
-    def s_predict(text):
-        c = normalize_text(text)
-        lvl = int(s_best.predict([c])[0])
-        proba = s_best.predict_proba([c])[0]
-        print(f"{text!r} -> Level {lvl} ({LEVEL_NAMES[lvl]}) | "
-              f"proba: {{ {', '.join(f'{LEVEL_NAMES[i]}: {float(p):.2f}' for i, p in enumerate(proba))} }}")
-        return lvl
-    print("--- affection from a mother, abuse from someone else ---")
-    for t in ["আমার কুত্তার বাচ্চাটা কই গেল", "কুত্তার বাচ্চা, আয় ভাত খা",
-              "তুই কুত্তার বাচ্চা", "তুই একটা কুত্তার বাচ্চা"]:
-        s_predict(t)
-    print("\\n--- ভইঙ্গা: joking vs angry ---")
-    for t in ["আরে ভইঙ্গা, কেমন আছস", "তুই ভইঙ্গা, যা এখান থেকে"]:
-        s_predict(t)
-    print("\\n--- neutral everyday sentences ---")
-    for t in ["আইজ ক্লাসত যাইবা না?", "বাজরত যাইর", "কাল আইয়োম তোর বারিত"]:
-        s_predict(t)
-    # Save the Track B model separately — never mix it with Track A's .pkl.
-    joblib.dump({"model": s_best, "levels": LEVEL_NAMES, "best_name": "LogReg"},
-                "banglish_sentence_model.pkl")
-    print("\\nsaved: banglish_sentence_model.pkl (Track B, LogReg)")
 """))
 
 cells.append(md("""## 5b. Model comparison grid — which setup is best, and why
@@ -751,7 +625,9 @@ for t in ["kal class hobe?", "tui ekta pagol", "tui ekta beyadob",
           "তোকে মেরে ফেলবো", "চু,,, দি", "ছাত্রলীগের মারে চুদি",
           "তোর ফুফুরে চুদি", "তোরে চুদমু", "m0therboard",
           "আমি ছাত্রলীগ করি", "আমার মারে ভালোবাসি",
-          "ওয়েট কর, আসতেছি", "তোর মারে সালাম দিস"]:
+          "ওয়েট কর, আসতেছি", "তোর মারে সালাম দিস",
+          # Same words, different speaker — mother (affection) vs someone else (abuse).
+          "আমার কুত্তার বাচ্চাটা কই গেল", "তুই কুত্তার বাচ্চা"]:
     predict(t)
 """))
 
@@ -763,9 +639,7 @@ cells.append(md("""## 9. Next steps and limitations
 4. **Level 3 stays rare.** Real direct threats are hard to find; I use `class_weight="balanced"` to compensate, and I say so in the report.
 5. **TB-OLID labels are mapped, not gold.** TB-OLID only has offensive/non-offensive labels; I mapped them to Levels 1–3 with a lexicon scan, so some rows are mislabeled.
 6. **Ethics.** No names, phone numbers, or private chats in the data; the model detects, it does not accuse.
-7. **Track B (sentence) limits.** Level 3 has 28 rows (6 in test) — its 0.500 recall is a small-sample number. L1 recall is 0.51. Some sentence labels are machine-made (silver) or synthetic — the methodology says so openly. As more sentence data arrives, Track B is retrained and these numbers change.
-
-Results as of round 14 (18 Nov 2026): 12,639 rows (L0 5,491 / L1 1,870 / L2 4,446 / L3 832), lexicon 4,269 terms. Track A shipped: accuracy 0.803 (baseline 0.688), Level 3 recall 0.939 (baseline 0.762), masked 0.740, variant + demo 90/90. Track B: LogReg macro-F1 0.606 (Section 10).
+Results as of round 14 (18 Nov 2026): 12,639 rows (L0 5,491 / L1 1,870 / L2 4,446 / L3 832), lexicon 4,269 terms. Shipped model: accuracy 0.803 (baseline 0.688), Level 3 recall 0.939 (baseline 0.762), masked 0.740, variant + demo 90/90.
 
 The notebook trains the same pipeline; its numbers differ slightly from the shipped model (accuracy 0.799 here vs 0.803 shipped, L3 recall 0.946 vs 0.939, masked 0.739 vs 0.740 with normalization and 0.750 vs 0.755 without) because the masked augmentation uses random choices.
 """))
