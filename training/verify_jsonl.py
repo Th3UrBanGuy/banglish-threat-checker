@@ -75,8 +75,19 @@ aug_df = pd.DataFrame(aug_rows)
 train_aug = pd.concat([train_df, aug_df], ignore_index=True)
 print(f"train + augmented: {len(train_aug)}")
 
+# Mark-inclusive word token pattern (2026-11-18, model comparison round 2):
+# sklearn's default (?u)\b\w\w+\b uses Python \w, which drops Bengali
+# combining marks (Mn/Mc: vowel signs, virama) — "কুত্তা" shredded to
+# ['বন','রব'] and the word half of the vectorizer went nearly blind on
+# Bangla script. Adding the Bengali block keeps words whole.
+# Verified on two splits (rs42 + rs7): +0.011..+0.014 acc, Bangla +0.034..+0.038,
+# variant 82/82 (was 80-81/82) — unblocks the gate. predictor.js MUST use
+# the same rule (see its RE_TOKEN comment).
+MARK_TOKEN_PATTERN = r"(?u)[\w\u0980-\u09FF]{2,}"
+
 word_tfidf = TfidfVectorizer(ngram_range=(1, 3), max_features=8000,
-                             sublinear_tf=True, min_df=2)
+                             sublinear_tf=True, min_df=2,
+                             token_pattern=MARK_TOKEN_PATTERN)
 char_tfidf = TfidfVectorizer(analyzer="char_wb", ngram_range=(2, 6),
                              max_features=12000, sublinear_tf=True, min_df=2)
 word_only = TfidfVectorizer(ngram_range=(1, 2), max_features=5000,
@@ -90,7 +101,11 @@ def make_pipe(clf, improved=True):
 
 
 models = {
-    "LogReg": LogisticRegression(max_iter=1000, class_weight="balanced"),
+    # C=4 (2026-11-18, comparison round 2, confirmed on two splits rs42+rs7):
+    # acc 0.811/0.791 vs live C=1 0.797/0.780 (+0.014/+0.011 — clears the
+    # >0.01 ship rule), variant 82/82 both splits, L3 0.950/0.956, masked
+    # 0.740/0.729 (slightly below live, still well above the 0.65 gate).
+    "LogReg": LogisticRegression(C=4, max_iter=1000, class_weight="balanced"),
     "LinearSVC": LinearSVC(class_weight="balanced"),
     "RandomForest": RandomForestClassifier(n_estimators=200,
                                            class_weight="balanced", n_jobs=-1),

@@ -1,20 +1,20 @@
 {
-  "fingerprint": "5e67e7b5ca8aa986c7784d9274ba51dc238b2f8b3740fa2620e34c8fa96119e8",
-  "ts_utc": "2026-11-17T20:44:03+00:00",
-  "learned_words": 4,
-  "dataset_rows": 6932,
+  "fingerprint": "730dceaf33397801a6cb633940f7b80d01fc02e5cdda7aed8209ba1abe4b04b8",
+  "ts_utc": "2026-11-18T10:13:24+00:00",
+  "learned_words": 1034,
+  "dataset_rows": 12639,
   "levels": {
-    "0": 2718,
-    "1": 599,
-    "2": 2844,
-    "3": 771
+    "0": 5491,
+    "1": 1870,
+    "2": 4446,
+    "3": 832
   },
   "best": "LogReg",
-  "best_acc": 0.807,
-  "base_acc": 0.741,
-  "l3_recall": 0.968,
-  "masked_norm": 0.771,
-  "variant": "56/56",
-  "static_url": "https://muse.ai/files/1282720808262570/1933115950992417/0nqrnj3tct74ti0pog37yoyk/checker.html",
-  "static_expires": "2026-11-19T20:44:02+00:00"
+  "best_acc": 0.803,
+  "base_acc": 0.688,
+  "l3_recall": 0.939,
+  "masked_norm": 0.74,
+  "variant": "90/90",
+  "static_url": "https://muse.ai/files/1282720808262570/1129095986501478/ygscx8mn154hgvm9oasbnwmh/checker.html",
+  "static_expires": "2026-11-20T10:13:23+00:00"
 }

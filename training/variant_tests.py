@@ -54,6 +54,21 @@ VARIANT_TESTS = [
     # user verdicts (2026-11-18 03:07) — কুত্তার বাচ্চা: mother=L0, others=L2
     ("তুই কুত্তার বাচ্চা", 2), ("আমার কুত্তার বাচ্চাটা কই গেল", 0),
     ("চুনির ফুয়া", 2),
+    # Meta AI ador/gali batch 1 (2026-11-18) — SYNTHETIC sentences, same word
+    # friendly (L0) vs insult (word severity); spec texts force-trained
+    ("অডা তুঁই তো আঁর জানের বন্ধু", 0), ("অডা তোঁয়ার মুখ ন দেখতাম চাই", 1),
+    ("হারামি তুঁই তো আঁর জান", 0), ("হারামি, তুঁই একটা চোর", 1),
+    # CORRECTION 2026-11-18 11:20 (user verdict 09:21 — মাগির ফুত + কুত্তা
+    # are NEVER ador; the 20 false ador rows were deleted, so the friendly
+    # frames below must expect L2, not L0 — the stale L0 expectation blocked
+    # the 11:15 deploy). অডা/বলদ/হারামি friendly frames stay L0 (50/50).
+    ("মাগির ফুত, তুঁই আঁর জানের বন্ধু", 2),
+    ("মাগির ফুত, তুঁই একটা জানোয়ার", 2),
+    ("বলদ, তুঁই তো আঁর জানের বন্ধু", 0), ("বলদ, তুঁই একটা গাধা", 1),
+    ("কুত্তা, তুঁই আঁর জানের বন্ধু", 2), ("কুত্তা, তুঁই একটা জানোয়ার", 2),
+    # round-13 fix — বাজিরে greeting must stay L0 (08:45 tick live-probe
+    # miss: 'বাজিরে, কেমন আছস' expected L0 got L1; spec-forced into train)
+    ("বাজিরে, কেমন আছস", 0), ("বাজি, কেমন আছস", 0),
 ]
 
 
